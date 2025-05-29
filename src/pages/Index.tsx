@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { Search, Star, Calendar, Clock, Film } from 'lucide-react';
 import { Input } from '@/components/ui/input';
@@ -18,6 +17,8 @@ interface Movie {
   genre_ids: number[];
   backdrop_path: string | null;
   runtime?: number;
+  original_title?: string;
+  original_language?: string;
 }
 
 const API_KEY = '3fd2be6f0c70a2a598f084ddfb75487c'; // TMDb demo API key
@@ -49,29 +50,64 @@ const MovieSearchApp = () => {
 
     setLoading(true);
     try {
-      const response = await fetch(
-        `${BASE_URL}/search/movie?api_key=${API_KEY}&query=${encodeURIComponent(query)}&include_adult=false`
-      );
+      // Using a more robust fetch approach with proper headers
+      const url = `${BASE_URL}/search/movie?api_key=${API_KEY}&query=${encodeURIComponent(query)}&include_adult=false&language=en-US&page=1`;
+      
+      console.log('Searching for:', query);
+      console.log('API URL:', url);
+      
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+        },
+      });
       
       if (!response.ok) {
-        throw new Error('Failed to fetch movies');
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
       
       const data = await response.json();
-      setMovies(data.results || []);
+      console.log('Search results:', data);
+      
+      if (data.results) {
+        setMovies(data.results);
+        toast({
+          title: "Search Complete",
+          description: `Found ${data.results.length} movies for "${query}"`,
+        });
+      } else {
+        setMovies([]);
+        toast({
+          title: "No Results",
+          description: `No movies found for "${query}". Try different spelling or keywords.`,
+        });
+      }
     } catch (error) {
       console.error('Error searching movies:', error);
-      toast({
-        title: "Search Error",
-        description: "Failed to search movies. Please try again.",
-        variant: "destructive",
-      });
+      setMovies([]);
+      
+      // More specific error handling
+      if (error instanceof TypeError && error.message === 'Failed to fetch') {
+        toast({
+          title: "Connection Error",
+          description: "Unable to connect to movie database. Please check your internet connection and try again.",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Search Error",
+          description: "Failed to search movies. Please try again with different keywords.",
+          variant: "destructive",
+        });
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  const debouncedSearch = useCallback(debounce(searchMovies, 300), []);
+  const debouncedSearch = useCallback(debounce(searchMovies, 500), []);
 
   useEffect(() => {
     debouncedSearch(searchQuery);
@@ -79,21 +115,28 @@ const MovieSearchApp = () => {
 
   const fetchMovieDetails = async (movieId: number) => {
     try {
-      const response = await fetch(
-        `${BASE_URL}/movie/${movieId}?api_key=${API_KEY}&append_to_response=credits`
-      );
+      const url = `${BASE_URL}/movie/${movieId}?api_key=${API_KEY}&append_to_response=credits&language=en-US`;
+      
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+        },
+      });
       
       if (!response.ok) {
-        throw new Error('Failed to fetch movie details');
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
       
       const data = await response.json();
+      console.log('Movie details:', data);
       setMovieDetails(data);
     } catch (error) {
       console.error('Error fetching movie details:', error);
       toast({
         title: "Error",
-        description: "Failed to load movie details.",
+        description: "Failed to load movie details. Please try again.",
         variant: "destructive",
       });
     }
@@ -130,12 +173,16 @@ const MovieSearchApp = () => {
                 src={`${IMAGE_BASE_URL}${movie.poster_path}`}
                 alt={movie.title}
                 className="w-full h-64 object-cover group-hover:scale-105 transition-transform duration-300"
+                onError={(e) => {
+                  const target = e.target as HTMLImageElement;
+                  target.style.display = 'none';
+                  target.nextElementSibling?.classList.remove('hidden');
+                }}
               />
-            ) : (
-              <div className="w-full h-64 bg-gray-800 flex items-center justify-center">
-                <Film className="w-12 h-12 text-gray-500" />
-              </div>
-            )}
+            ) : null}
+            <div className={`w-full h-64 bg-gray-800 flex items-center justify-center ${movie.poster_path ? 'hidden' : ''}`}>
+              <Film className="w-12 h-12 text-gray-500" />
+            </div>
             <div className="absolute top-2 right-2">
               <Badge className="bg-yellow-500/90 text-black font-semibold">
                 <Star className="w-3 h-3 mr-1" />
@@ -149,9 +196,21 @@ const MovieSearchApp = () => {
               {movie.title}
             </h3>
             
+            {movie.original_title && movie.original_title !== movie.title && (
+              <p className="text-purple-300 text-sm mb-2 italic">
+                Original: {movie.original_title}
+              </p>
+            )}
+            
             <div className="flex items-center gap-2 text-gray-400 text-sm mb-3">
               <Calendar className="w-4 h-4" />
               <span>{formatDate(movie.release_date)}</span>
+              {movie.original_language && (
+                <>
+                  <span>•</span>
+                  <span className="uppercase">{movie.original_language}</span>
+                </>
+              )}
             </div>
             
             <p className="text-gray-300 text-sm line-clamp-3 leading-relaxed">
@@ -174,6 +233,11 @@ const MovieSearchApp = () => {
                 <div className="absolute inset-0 bg-gradient-to-t from-gray-900 via-gray-900/50 to-transparent" />
                 <div className="absolute bottom-4 left-6 right-6">
                   <h2 className="text-3xl font-bold text-white mb-2">{movieDetails.title}</h2>
+                  {movieDetails.original_title && movieDetails.original_title !== movieDetails.title && (
+                    <p className="text-purple-300 text-lg mb-2 italic">
+                      Original: {movieDetails.original_title}
+                    </p>
+                  )}
                   <div className="flex items-center gap-4 text-gray-300">
                     <span className="flex items-center gap-1">
                       <Star className="w-4 h-4 text-yellow-500" />
@@ -187,6 +251,11 @@ const MovieSearchApp = () => {
                       <Clock className="w-4 h-4" />
                       {formatRuntime(movieDetails.runtime)}
                     </span>
+                    {movieDetails.original_language && (
+                      <span className="uppercase bg-purple-600/20 px-2 py-1 rounded text-purple-300">
+                        {movieDetails.original_language}
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -195,6 +264,11 @@ const MovieSearchApp = () => {
             {!movieDetails.backdrop_path && (
               <div className="text-center mb-6">
                 <h2 className="text-3xl font-bold text-white mb-4">{movieDetails.title}</h2>
+                {movieDetails.original_title && movieDetails.original_title !== movieDetails.title && (
+                  <p className="text-purple-300 text-lg mb-4 italic">
+                    Original: {movieDetails.original_title}
+                  </p>
+                )}
                 <div className="flex items-center justify-center gap-4 text-gray-300">
                   <span className="flex items-center gap-1">
                     <Star className="w-4 h-4 text-yellow-500" />
@@ -208,6 +282,11 @@ const MovieSearchApp = () => {
                     <Clock className="w-4 h-4" />
                     {formatRuntime(movieDetails.runtime)}
                   </span>
+                  {movieDetails.original_language && (
+                    <span className="uppercase bg-purple-600/20 px-2 py-1 rounded text-purple-300">
+                      {movieDetails.original_language}
+                    </span>
+                  )}
                 </div>
               </div>
             )}
@@ -304,7 +383,7 @@ const MovieSearchApp = () => {
             MovieFinder
           </h1>
           <p className="text-xl text-gray-300 max-w-2xl mx-auto">
-            Discover movies from around the world. Search for any film and explore detailed information, ratings, and more.
+            Discover movies from around the world including Indian cinema. Search for Telugu, Hindi, Malayalam, Tamil, and other regional films with accurate spelling.
           </p>
         </div>
 
@@ -313,11 +392,14 @@ const MovieSearchApp = () => {
           <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
           <Input
             type="text"
-            placeholder="Search for movies..."
+            placeholder="Search for movies... (Try: Baahubali, RRR, Pushpa, KGF, Dangal)"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-12 h-14 text-lg bg-gray-900/50 border-gray-700 focus:border-purple-500 transition-colors text-white placeholder:text-gray-400"
           />
+          <div className="mt-2 text-sm text-gray-400 text-center">
+            💡 Tip: Use exact spelling for best results. Try popular Indian films like "Baahubali", "RRR", "KGF"
+          </div>
         </div>
 
         {/* Results */}
@@ -341,13 +423,24 @@ const MovieSearchApp = () => {
             <div className="text-center py-16">
               <Film className="w-16 h-16 text-gray-500 mx-auto mb-4" />
               <h3 className="text-xl font-semibold mb-2">No movies found</h3>
-              <p className="text-gray-400">Try searching with different keywords</p>
+              <p className="text-gray-400">Try different spelling or keywords</p>
+              <div className="mt-4 text-sm text-gray-500">
+                <p>Common Indian film suggestions:</p>
+                <p>Telugu: Baahubali, RRR, Pushpa, Arjun Reddy</p>
+                <p>Hindi: Dangal, 3 Idiots, Zindagi Na Milegi Dobara</p>
+                <p>Tamil: 2.0, Vikram, Master</p>
+                <p>Malayalam: Drishyam, Kumbakonam Gopals</p>
+              </div>
             </div>
           ) : !searchQuery ? (
             <div className="text-center py-16">
               <Search className="w-16 h-16 text-gray-500 mx-auto mb-4" />
               <h3 className="text-xl font-semibold mb-2">Start searching</h3>
-              <p className="text-gray-400">Enter a movie title to discover amazing films</p>
+              <p className="text-gray-400">Enter a movie title to discover amazing films from India and worldwide</p>
+              <div className="mt-4 text-sm text-gray-500">
+                <p>Popular Indian films to try:</p>
+                <p className="mt-2">🎬 Baahubali • RRR • KGF • Pushpa • Dangal • 3 Idiots</p>
+              </div>
             </div>
           ) : null}
         </div>
