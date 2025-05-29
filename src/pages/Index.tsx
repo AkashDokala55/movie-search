@@ -26,6 +26,9 @@ const BASE_URL = 'https://api.themoviedb.org/3';
 const IMAGE_BASE_URL = 'https://image.tmdb.org/t/p/w500';
 const BACKDROP_BASE_URL = 'https://image.tmdb.org/t/p/w1280';
 
+// Using a CORS proxy to handle cross-origin requests
+const CORS_PROXY = 'https://api.allorigins.win/raw?url=';
+
 const MovieSearchApp = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [movies, setMovies] = useState<Movie[]>([]);
@@ -50,17 +53,16 @@ const MovieSearchApp = () => {
 
     setLoading(true);
     try {
-      // Using a more robust fetch approach with proper headers
-      const url = `${BASE_URL}/search/movie?api_key=${API_KEY}&query=${encodeURIComponent(query)}&include_adult=false&language=en-US&page=1`;
+      const encodedUrl = encodeURIComponent(`${BASE_URL}/search/movie?api_key=${API_KEY}&query=${encodeURIComponent(query)}&include_adult=false&language=en-US&page=1`);
+      const url = `${CORS_PROXY}${encodedUrl}`;
       
       console.log('Searching for:', query);
-      console.log('API URL:', url);
+      console.log('Using CORS proxy URL:', url);
       
       const response = await fetch(url, {
         method: 'GET',
         headers: {
           'Accept': 'application/json',
-          'Content-Type': 'application/json',
         },
       });
       
@@ -71,7 +73,7 @@ const MovieSearchApp = () => {
       const data = await response.json();
       console.log('Search results:', data);
       
-      if (data.results) {
+      if (data.results && Array.isArray(data.results)) {
         setMovies(data.results);
         toast({
           title: "Search Complete",
@@ -88,20 +90,11 @@ const MovieSearchApp = () => {
       console.error('Error searching movies:', error);
       setMovies([]);
       
-      // More specific error handling
-      if (error instanceof TypeError && error.message === 'Failed to fetch') {
-        toast({
-          title: "Connection Error",
-          description: "Unable to connect to movie database. Please check your internet connection and try again.",
-          variant: "destructive",
-        });
-      } else {
-        toast({
-          title: "Search Error",
-          description: "Failed to search movies. Please try again with different keywords.",
-          variant: "destructive",
-        });
-      }
+      toast({
+        title: "Connection Error",
+        description: "Unable to search movies at the moment. Please try again in a few seconds.",
+        variant: "destructive",
+      });
     } finally {
       setLoading(false);
     }
@@ -115,13 +108,13 @@ const MovieSearchApp = () => {
 
   const fetchMovieDetails = async (movieId: number) => {
     try {
-      const url = `${BASE_URL}/movie/${movieId}?api_key=${API_KEY}&append_to_response=credits&language=en-US`;
+      const encodedUrl = encodeURIComponent(`${BASE_URL}/movie/${movieId}?api_key=${API_KEY}&append_to_response=credits&language=en-US`);
+      const url = `${CORS_PROXY}${encodedUrl}`;
       
       const response = await fetch(url, {
         method: 'GET',
         headers: {
           'Accept': 'application/json',
-          'Content-Type': 'application/json',
         },
       });
       
