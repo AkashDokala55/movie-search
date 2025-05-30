@@ -39,6 +39,8 @@ const MovieSearchApp = () => {
   const [selectedMovie, setSelectedMovie] = useState<Movie | null>(null);
   const [movieDetails, setMovieDetails] = useState<any>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [movieDetailsLoading, setMovieDetailsLoading] = useState(false);
+  const [movieDetailsError, setMovieDetailsError] = useState(false);
   const { toast } = useToast();
 
   const debounce = (func: Function, delay: number) => {
@@ -152,6 +154,8 @@ const MovieSearchApp = () => {
   }, [searchQuery, debouncedSearch]);
 
   const fetchMovieDetails = async (movieId: number) => {
+    setMovieDetailsLoading(true);
+    setMovieDetailsError(false);
     try {
       const encodedUrl = encodeURIComponent(`${BASE_URL}/movie/${movieId}?api_key=${API_KEY}&append_to_response=credits&language=en-US`);
       const url = `${CORS_PROXY}${encodedUrl}`;
@@ -172,19 +176,31 @@ const MovieSearchApp = () => {
       setMovieDetails(data);
     } catch (error) {
       console.error('Error fetching movie details:', error);
+      setMovieDetailsError(true);
       toast({
         title: "Error",
         description: "Failed to load movie details. Please try again.",
         variant: "destructive",
       });
+    } finally {
+      setMovieDetailsLoading(false);
     }
   };
 
   const handleMovieClick = (movie: Movie) => {
     setSelectedMovie(movie);
     setMovieDetails(null);
+    setMovieDetailsError(false);
     setIsDialogOpen(true);
     fetchMovieDetails(movie.id);
+  };
+
+  const handleDialogClose = () => {
+    setIsDialogOpen(false);
+    setSelectedMovie(null);
+    setMovieDetails(null);
+    setMovieDetailsError(false);
+    setMovieDetailsLoading(false);
   };
 
   const handleBackToHome = () => {
@@ -205,7 +221,7 @@ const MovieSearchApp = () => {
   };
 
   const MovieCard = ({ movie }: { movie: Movie }) => (
-    <Dialog open={isDialogOpen && selectedMovie?.id === movie.id} onOpenChange={(open) => !open && handleBackToHome()}>
+    <Dialog open={isDialogOpen && selectedMovie?.id === movie.id} onOpenChange={(open) => !open && handleDialogClose()}>
       <DialogTrigger asChild>
         <Card 
           className="movie-card-hover cursor-pointer bg-gray-900/50 border-gray-800 backdrop-blur-sm overflow-hidden group"
@@ -269,7 +285,7 @@ const MovieSearchApp = () => {
           <Button
             variant="ghost"
             size="sm"
-            onClick={handleBackToHome}
+            onClick={handleDialogClose}
             className="bg-black/50 hover:bg-black/70 text-white border border-gray-600"
           >
             <ArrowLeft className="w-4 h-4 mr-2" />
@@ -277,7 +293,20 @@ const MovieSearchApp = () => {
           </Button>
         </div>
         
-        {movieDetails ? (
+        {movieDetailsError ? (
+          <div className="text-center py-16 pt-20">
+            <Film className="w-16 h-16 text-gray-500 mx-auto mb-4" />
+            <h3 className="text-xl font-semibold mb-2 text-white">Failed to load movie details</h3>
+            <p className="text-gray-400 mb-4">Unable to fetch information for this movie.</p>
+            <Button
+              onClick={() => selectedMovie && fetchMovieDetails(selectedMovie.id)}
+              variant="outline"
+              className="bg-gray-800 border-gray-600 hover:bg-gray-700 text-white"
+            >
+              Try Again
+            </Button>
+          </div>
+        ) : movieDetails ? (
           <div className="space-y-6">
             {movieDetails.backdrop_path && (
               <div className="relative -mx-6 -mt-6 mb-6">
