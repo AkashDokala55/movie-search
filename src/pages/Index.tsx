@@ -1,10 +1,12 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
-import { Search, Star, Calendar, Clock, Film } from 'lucide-react';
+import { Search, Star, Calendar, Clock, Film, ArrowLeft } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogTrigger } from '@/components/ui/dialog';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 
 interface Movie {
@@ -32,9 +34,12 @@ const CORS_PROXY = 'https://api.allorigins.win/raw?url=';
 const MovieSearchApp = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [movies, setMovies] = useState<Movie[]>([]);
+  const [trendingMovies, setTrendingMovies] = useState<Movie[]>([]);
   const [loading, setLoading] = useState(false);
+  const [trendingLoading, setTrendingLoading] = useState(false);
   const [selectedMovie, setSelectedMovie] = useState<Movie | null>(null);
   const [movieDetails, setMovieDetails] = useState<any>(null);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
   const { toast } = useToast();
 
   const debounce = (func: Function, delay: number) => {
@@ -44,6 +49,47 @@ const MovieSearchApp = () => {
       timeoutId = setTimeout(() => func.apply(null, args), delay);
     };
   };
+
+  const fetchTrendingMovies = async () => {
+    setTrendingLoading(true);
+    try {
+      const encodedUrl = encodeURIComponent(`${BASE_URL}/trending/movie/week?api_key=${API_KEY}&language=en-US`);
+      const url = `${CORS_PROXY}${encodedUrl}`;
+      
+      console.log('Fetching trending movies...');
+      
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+        },
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      console.log('Trending movies:', data);
+      
+      if (data.results && Array.isArray(data.results)) {
+        setTrendingMovies(data.results.slice(0, 10)); // Show top 10 trending movies
+      }
+    } catch (error) {
+      console.error('Error fetching trending movies:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load trending movies. Please refresh the page.",
+        variant: "destructive",
+      });
+    } finally {
+      setTrendingLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchTrendingMovies();
+  }, []);
 
   const searchMovies = async (query: string) => {
     if (!query.trim()) {
@@ -138,7 +184,14 @@ const MovieSearchApp = () => {
   const handleMovieClick = (movie: Movie) => {
     setSelectedMovie(movie);
     setMovieDetails(null);
+    setIsDialogOpen(true);
     fetchMovieDetails(movie.id);
+  };
+
+  const handleBackToHome = () => {
+    setIsDialogOpen(false);
+    setSelectedMovie(null);
+    setMovieDetails(null);
   };
 
   const formatDate = (dateString: string) => {
@@ -154,7 +207,7 @@ const MovieSearchApp = () => {
   };
 
   const MovieCard = ({ movie }: { movie: Movie }) => (
-    <Dialog>
+    <Dialog open={isDialogOpen && selectedMovie?.id === movie.id} onOpenChange={(open) => !open && handleBackToHome()}>
       <DialogTrigger asChild>
         <Card 
           className="movie-card-hover cursor-pointer bg-gray-900/50 border-gray-800 backdrop-blur-sm overflow-hidden group"
@@ -214,6 +267,18 @@ const MovieSearchApp = () => {
       </DialogTrigger>
       
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto bg-gray-900 border-gray-800 text-white">
+        <div className="absolute top-4 left-4 z-10">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleBackToHome}
+            className="bg-black/50 hover:bg-black/70 text-white border border-gray-600"
+          >
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Back to Home
+          </Button>
+        </div>
+        
         {movieDetails ? (
           <div className="space-y-6">
             {movieDetails.backdrop_path && (
@@ -255,7 +320,7 @@ const MovieSearchApp = () => {
             )}
             
             {!movieDetails.backdrop_path && (
-              <div className="text-center mb-6">
+              <div className="text-center mb-6 pt-12">
                 <h2 className="text-3xl font-bold text-white mb-4">{movieDetails.title}</h2>
                 {movieDetails.original_title && movieDetails.original_title !== movieDetails.title && (
                   <p className="text-purple-300 text-lg mb-4 italic">
@@ -335,7 +400,7 @@ const MovieSearchApp = () => {
             </div>
           </div>
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-4 pt-12">
             <Skeleton className="h-64 w-full bg-gray-800" />
             <div className="grid md:grid-cols-3 gap-6">
               <Skeleton className="h-96 bg-gray-800" />
@@ -395,47 +460,68 @@ const MovieSearchApp = () => {
           </div>
         </div>
 
-        {/* Results */}
+        {/* Search Results or Trending Movies */}
         <div className="fade-in">
-          {loading ? (
-            <LoadingSkeleton />
-          ) : movies.length > 0 ? (
+          {searchQuery ? (
+            // Search Results Section
+            loading ? (
+              <LoadingSkeleton />
+            ) : movies.length > 0 ? (
+              <>
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-2xl font-semibold">
+                    Search Results ({movies.length})
+                  </h2>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
+                  {movies.map((movie) => (
+                    <MovieCard key={movie.id} movie={movie} />
+                  ))}
+                </div>
+              </>
+            ) : (
+              <div className="text-center py-16">
+                <Film className="w-16 h-16 text-gray-500 mx-auto mb-4" />
+                <h3 className="text-xl font-semibold mb-2">No movies found</h3>
+                <p className="text-gray-400">Try different spelling or keywords</p>
+                <div className="mt-4 text-sm text-gray-500">
+                  <p>Common Indian film suggestions:</p>
+                  <p>Telugu: Baahubali, RRR, Pushpa, Arjun Reddy</p>
+                  <p>Hindi: Dangal, 3 Idiots, Zindagi Na Milegi Dobara</p>
+                  <p>Tamil: 2.0, Vikram, Master</p>
+                  <p>Malayalam: Drishyam, Kumbakonam Gopals</p>
+                </div>
+              </div>
+            )
+          ) : (
+            // Trending Movies Section
             <>
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-2xl font-semibold">
-                  Search Results ({movies.length})
-                </h2>
+              <div className="text-center mb-8">
+                <h2 className="text-3xl font-bold mb-2 gradient-text">Trending This Week</h2>
+                <p className="text-gray-400">Popular movies people are watching right now</p>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
-                {movies.map((movie) => (
-                  <MovieCard key={movie.id} movie={movie} />
-                ))}
-              </div>
+              
+              {trendingLoading ? (
+                <LoadingSkeleton />
+              ) : trendingMovies.length > 0 ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
+                  {trendingMovies.map((movie) => (
+                    <MovieCard key={movie.id} movie={movie} />
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-16">
+                  <Search className="w-16 h-16 text-gray-500 mx-auto mb-4" />
+                  <h3 className="text-xl font-semibold mb-2">Start searching</h3>
+                  <p className="text-gray-400">Enter a movie title to discover amazing films from India and worldwide</p>
+                  <div className="mt-4 text-sm text-gray-500">
+                    <p>Popular Indian films to try:</p>
+                    <p className="mt-2">🎬 Baahubali • RRR • KGF • Pushpa • Dangal • 3 Idiots</p>
+                  </div>
+                </div>
+              )}
             </>
-          ) : searchQuery && !loading ? (
-            <div className="text-center py-16">
-              <Film className="w-16 h-16 text-gray-500 mx-auto mb-4" />
-              <h3 className="text-xl font-semibold mb-2">No movies found</h3>
-              <p className="text-gray-400">Try different spelling or keywords</p>
-              <div className="mt-4 text-sm text-gray-500">
-                <p>Common Indian film suggestions:</p>
-                <p>Telugu: Baahubali, RRR, Pushpa, Arjun Reddy</p>
-                <p>Hindi: Dangal, 3 Idiots, Zindagi Na Milegi Dobara</p>
-                <p>Tamil: 2.0, Vikram, Master</p>
-                <p>Malayalam: Drishyam, Kumbakonam Gopals</p>
-              </div>
-            </div>
-          ) : !searchQuery ? (
-            <div className="text-center py-16">
-              <Search className="w-16 h-16 text-gray-500 mx-auto mb-4" />
-              <h3 className="text-xl font-semibold mb-2">Start searching</h3>
-              <p className="text-gray-400">Enter a movie title to discover amazing films from India and worldwide</p>
-              <div className="mt-4 text-sm text-gray-500">
-                <p>Popular Indian films to try:</p>
-                <p className="mt-2">🎬 Baahubali • RRR • KGF • Pushpa • Dangal • 3 Idiots</p>
-              </div>
-            </div>
-          ) : null}
+          )}
         </div>
       </div>
     </div>
