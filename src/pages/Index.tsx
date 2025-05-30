@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { Search, Star, Calendar, Clock, Film, ArrowLeft } from 'lucide-react';
 import { Input } from '@/components/ui/input';
@@ -189,9 +188,8 @@ const MovieSearchApp = () => {
   };
 
   const handleBackToHome = () => {
-    setIsDialogOpen(false);
-    setSelectedMovie(null);
-    setMovieDetails(null);
+    setSearchQuery('');
+    setMovies([]);
   };
 
   const formatDate = (dateString: string) => {
@@ -459,6 +457,20 @@ const MovieSearchApp = () => {
             💡 Tip: Use exact spelling for best results. Try popular Indian films like "Baahubali", "RRR", "KGF"
           </div>
         </div>
+
+        {/* Back Button - Only show when searching */}
+        {searchQuery && (
+          <div className="flex justify-center mb-6">
+            <Button
+              onClick={handleBackToHome}
+              variant="outline"
+              className="bg-gray-900/50 border-gray-700 hover:bg-gray-800 text-white"
+            >
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Back to Trending
+            </Button>
+          </div>
+        )}
 
         {/* Search Results or Trending Movies */}
         <div className="fade-in">
